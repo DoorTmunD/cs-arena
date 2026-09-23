@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cs-arena",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-23",
+  "workers_dev": true,
+  "send_metrics": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/healthz"],
+    "not_found_handling": "none"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cs-arena-db",
+      "database_id": "d68d7836-7c52-458a-988a-60f140347a96",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

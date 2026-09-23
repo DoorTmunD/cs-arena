@@ -3,6 +3,22 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node server.js", "dev": "node --watch server.js", "test": "node --test" },
-  "engines": { "node": ">=24" }
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "dev:cloudflare": "wrangler dev",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy:check": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "secret:cloudflare": "node scripts/cloudflare-password.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "miniflare": "5.20260921.0-alpha",
+    "wrangler": "4.137.0"
+  }
 }

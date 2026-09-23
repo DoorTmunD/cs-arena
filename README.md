@@ -4,7 +4,7 @@ Site em português para organizar partidas de Counter-Strike entre amigos. Visua
 
 ## Iniciar
 
-Requer Node.js 24 ou superior. Não há dependências para instalar.
+Requer Node.js 24 ou superior. Para a versão Node local não há dependências de execução; para testes e Cloudflare, instale as ferramentas com `npm ci`.
 
 ```powershell
 npm start
@@ -33,24 +33,47 @@ O site começa vazio, sem times, jogadores, partidas ou estatísticas de demonst
 
 Vitória vale 3 pontos e empate vale 1. Os times empatados são ordenados por saldo de rounds e vitórias; persistindo o empate, por nome. Jogadores são ordenados por kills, menos mortes e nome. K/D é a razão entre totais; sem mortes e com kills aparece ∞. Partidas agendadas não contam no ranking. Datas e horários são tratados como horário local da comunidade, sem conversão de fuso.
 
-O banco é compartilhado no servidor, não no armazenamento do navegador. Em uma mesma rede, os amigos podem acessar `http://IP-DO-COMPUTADOR:3000` se a rede e o firewall permitirem. Para acesso pela internet, use a configuração do Render abaixo.
+O banco é compartilhado no servidor, não no armazenamento do navegador. Em uma mesma rede, os amigos podem acessar `http://IP-DO-COMPUTADOR:3000` se a rede e o firewall permitirem. Para acesso pela internet, use a configuração Cloudflare abaixo.
 
-## Publicar no Render
+## Publicar na Cloudflare (Workers + D1)
 
-O arquivo `render.yaml` configura um serviço Node 24 com disco persistente de 1 GB, cookies seguros e verificação de saúde. Essa configuração usa recursos pagos: confira a estimativa no painel do Render antes de confirmar. O plano gratuito não suporta o disco necessário para preservar este SQLite.
+A versão online usa `worker/index.js`, o banco persistente D1 e os arquivos estáticos de `public/`. A versão local Node continua disponível com `npm start`. A configuração ativa está em `wrangler.jsonc`.
 
-1. Entre em https://dashboard.render.com/ e conecte sua conta do GitHub.
-2. Autorize acesso ao repositório privado `DoorTmunD/cs-arena`.
-3. Escolha **New → Blueprint**, selecione esse repositório e a branch `main`.
-4. Defina `ADMIN_PASSWORD` com pelo menos 12 caracteres. Guarde essa senha; ela será usada no acesso do organizador e não será impressa nos logs.
-5. Revise o custo do serviço e do disco e confirme a publicação se estiver de acordo.
-6. Aguarde o serviço ficar **Live** e abra a URL HTTPS exibida pelo Render. O nome da URL será definido pela plataforma; não é garantido que seja `cs-arena.onrender.com`.
+```powershell
+npm ci
+npx wrangler login
+npx wrangler d1 create cs-arena-db
+```
 
-O site online começa vazio. O banco e as credenciais locais não são enviados ao Render. Novos commits em `main` disparam a execução dos testes e uma atualização automática do site. O disco em `/var/data` preserva cadastros e credenciais entre atualizações; mantenha somente uma instância do serviço. Alterar `ADMIN_PASSWORD` depois da criação não troca a senha já gravada: consulte a recuperação descrita acima. `/healthz` permite verificar a disponibilidade do servidor e do banco sem expor os dados.
+Copie o `database_id` retornado pela Cloudflare para a entrada `d1_databases` em `wrangler.jsonc`. Se o Wrangler já tiver incluído o campo, não crie outro banco. Se a conta tiver vários bancos com esse nome, identifique o correto antes de prosseguir. Depois:
 
-Documentação: [discos persistentes](https://render.com/docs/disks), [Blueprints](https://render.com/docs/blueprint-spec) e [preços](https://render.com/pricing).
+```powershell
+npm run db:remote
+npm run secret:cloudflare
+npm test
+npm run deploy
+```
 
-Variáveis de ambiente: `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (pasta data) e `COOKIE_SECURE=1` (usar ao publicar com HTTPS). Execute apenas uma instância apontando para o mesmo banco. Sessões duram 24 horas e são invalidadas ao reiniciar. O site consulta atualizações a cada minuto fora dos formulários.
+O script `secret:cloudflare` gera uma senha aleatória, salva em `data/cloudflare-admin-password.txt` (ignorado pelo Git) e a envia como secret `ADMIN_PASSWORD` à Cloudflare. Abra esse arquivo para consultar a senha. Ela nunca é enviada ao GitHub. O script reutiliza o arquivo se ele já existir. Também é possível definir uma senha própria de 16 a 200 caracteres com `npx wrangler secret put ADMIN_PASSWORD`.
+
+Use a URL HTTPS `.workers.dev` retornada pelo deploy para compartilhar com os amigos. Não é necessário comprar domínio. O banco online começa vazio; o SQLite local não é enviado. Sessões duram 24 horas e sobrevivem a atualizações do Worker. Trocar o secret invalida todas as sessões anteriores.
+
+Escolha Workers Free na sua conta. O projeto não requer recursos pagos. Os limites gratuitos da plataforma e da conta se aplicam; ultrapassá-los pode interromper o acesso até a renovação da cota. A versão atual armazena o histórico em um documento de até 1,5 MB no D1 (limite da aplicação, inferior à capacidade total do plano). Quando esse volume for atingido, a API recusa novos salvamentos sem apagar dados; o armazenamento poderá ser dividido em tabelas por partida numa evolução futura. Escritas simultâneas usam controle de versão para evitar perda de cadastros.
+
+Para atualizar: execute `npm test`, depois `npm run db:remote` se houver migrações novas e `npm run deploy`. Enviar um commit ao GitHub, sozinho, não publica uma atualização na Cloudflare.
+
+### Testar Workers no computador
+
+Crie `.dev.vars` na raiz com `ADMIN_PASSWORD="uma-senha-local-com-16-caracteres"` (use uma senha de teste, não a de produção). Esse arquivo não vai para o Git. Execute:
+
+```powershell
+npm run db:local
+npm run dev:cloudflare
+```
+
+O endereço local aparece no terminal. As migrações locais não alteram o banco online. `npm run deploy:check` verifica o pacote sem publicá-lo.
+
+Documentação: [Workers](https://developers.cloudflare.com/workers/), [D1](https://developers.cloudflare.com/d1/), [limites gratuitos](https://developers.cloudflare.com/workers/platform/pricing/).
 
 ## Dados e testes
 
@@ -60,7 +83,7 @@ O SQLite fica em `data/arena.sqlite`; para backup completo, pare o servidor e co
 npm test
 ```
 
-Os testes usam banco temporário separado, validam autenticação, CRUD, persistência após reinício, regras de ranking e rejeição de dados inválidos. A aplicação usa HTML, CSS, JavaScript e os módulos HTTP e SQLite nativos do Node.
+Os testes usam bancos temporários separados e o simulador oficial Miniflare. Validam autenticação, cookies, limite de tentativas, cadastros simultâneos, persistência após reinício, troca de senha, rankings e rejeição de dados inválidos. Nenhum teste altera o D1 remoto. No Node local, as sessões em memória expiram ao reiniciar; no Worker, as sessões são persistidas no D1.
 
 ## Arte
 
