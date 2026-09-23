@@ -14,11 +14,13 @@ const credentialFile = path.join(dir, 'admin.json');
 let credentials;
 if (existsSync(credentialFile)) credentials = JSON.parse(readFileSync(credentialFile));
 else {
+  if (process.env.NODE_ENV === 'production' && (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 12)) throw Error('Defina ADMIN_PASSWORD com pelo menos 12 caracteres antes da primeira execução em produção.');
   const password = process.env.ADMIN_PASSWORD || randomBytes(9).toString('base64url');
   const salt = randomBytes(16).toString('hex');
   credentials = { salt, hash: scryptSync(password, salt, 64).toString('hex') };
   writeFileSync(credentialFile, JSON.stringify(credentials));
-  console.log(`Senha inicial do administrador: ${password}\nGuarde esta senha. Ela não será exibida novamente.`);
+  if (!process.env.ADMIN_PASSWORD) console.log(`Senha inicial do administrador: ${password}\nGuarde esta senha. Ela não será exibida novamente.`);
+  else console.log('Credenciais do administrador configuradas a partir de ADMIN_PASSWORD.');
 }
 const initialState = { teams: [], players: [], matches: [] };
 if (!db.prepare('SELECT id FROM state WHERE id=1').get()) db.prepare('INSERT INTO state VALUES (1, ?)').run(JSON.stringify(initialState));
@@ -39,6 +41,10 @@ export function validateMatch(m,s) {
 const server=http.createServer(async(req,res)=>{
  try {
   const url=new URL(req.url,'http://localhost');
+  if(url.pathname==='/healthz'&&req.method==='GET'){
+   try { db.prepare('SELECT id FROM state WHERE id=1').get(); return json(res,200,{status:'ok'}); }
+   catch { return json(res,503,{status:'unavailable'}); }
+  }
   res.setHeader('X-Content-Type-Options','nosniff');
   res.setHeader('Referrer-Policy','same-origin');
   res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'");

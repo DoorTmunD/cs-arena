@@ -18,6 +18,7 @@ async function post(route,body,auth=true){return fetch(base+'/api/'+route,{metho
 const state=()=>fetch(base+'/api/state').then(r=>r.json());
 before(start);after(stop);
 test('public assets and read-only data are available',async()=>{
+ const health=await fetch(base+'/healthz');assert.equal(health.status,200);assert.deepEqual(await health.json(),{status:'ok'});
  for(const file of ['/','/app.js','/style.css','/hero.png'])assert.equal((await fetch(base+file)).status,200,file);
  const s=await state();assert.equal(s.authenticated,false);assert.deepEqual(s.teams,[]);assert.deepEqual(s.players,[]);assert.deepEqual(s.matches,[]);
  assert.equal((await post('team',{name:'Unauthorized'},false)).status,401);
